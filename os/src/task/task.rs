@@ -1,4 +1,7 @@
 //! Types related to task management & Functions for completely changing TCB
+
+use crate::config::MAX_SYSCALL_NUM;
+
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT_BASE;
@@ -34,6 +37,17 @@ impl TaskControlBlock {
         let inner = self.inner_exclusive_access();
         inner.memory_set.token()
     }
+    /// 增加當前 app 呼叫某系統呼叫的次數
+    pub fn increase_syscall_times(&self, syscall_number: usize) {
+        let mut inner = self.inner_exclusive_access();
+        inner.task_syscall_times[syscall_number] += 1;
+    }
+
+    /// 取得當前 app 呼叫某系統呼叫的次數
+    pub fn get_syscall_times(&self) -> [u32; MAX_SYSCALL_NUM] {
+        let inner = self.inner_exclusive_access();
+        inner.task_syscall_times
+    }
 }
 
 pub struct TaskControlBlockInner {
@@ -68,6 +82,9 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// 系統呼叫計數器
+    pub task_syscall_times: [u32; MAX_SYSCALL_NUM],
 }
 
 impl TaskControlBlockInner {
@@ -118,6 +135,7 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    task_syscall_times: [0; MAX_SYSCALL_NUM],
                 })
             },
         };
@@ -191,6 +209,7 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    task_syscall_times: [0; MAX_SYSCALL_NUM],
                 })
             },
         });
