@@ -18,7 +18,6 @@ pub fn get_time() -> usize {
 }
 
 /// get current time in milliseconds
-#[allow(dead_code)]
 pub fn get_time_ms() -> usize {
     time::read() * MSEC_PER_SEC / CLOCK_FREQ
 }
