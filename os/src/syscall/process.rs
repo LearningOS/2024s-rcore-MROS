@@ -1,4 +1,9 @@
 //! Process management syscalls
+use core::mem::size_of;
+
+use crate::mm::translated_byte_buffer;
+use crate::task::current_user_token;
+use crate::timer::get_time_us;
 use crate::{
     config::MAX_SYSCALL_NUM,
     task::{
@@ -40,12 +45,34 @@ pub fn sys_yield() -> isize {
     0
 }
 
+// 在應用程式給定的虛址上寫入數據
+unsafe fn write_structure<T: Sized>(ptr: *const u8, data: T) {
+    let len = size_of::<T>();
+    let pages = translated_byte_buffer(current_user_token(), ptr, len);
+    let u8_data = core::slice::from_raw_parts((&data as *const T) as *const u8, len);
+    let mut i: usize = 0;
+    for page in pages {
+        page.copy_from_slice(&u8_data[i..(i + page.len())]);
+        i += page.len();
+    }
+}
+
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
+pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
-    -1
+    let time = get_time_us();
+    unsafe {
+        write_structure(
+            ts as *const u8,
+            TimeVal {
+                sec: time / 1000000,
+                usec: time % 100000,
+            },
+        );
+    }
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
@@ -54,11 +81,14 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
 pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info");
     unsafe {
-        *ti = TaskInfo {
-            status: TaskStatus::Running,
-            syscall_times: get_current_syscall_times(),
-            time: get_time_ms(),
-        }
+        write_structure(
+            ti as *const u8,
+            TaskInfo {
+                status: TaskStatus::Running,
+                syscall_times: get_current_syscall_times(),
+                time: get_time_ms(),
+            },
+        )
     }
     0
 }
