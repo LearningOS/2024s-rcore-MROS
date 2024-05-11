@@ -1,13 +1,17 @@
 //! Process management syscalls
 use alloc::sync::Arc;
 
+use core::mem::size_of;
+
+use crate::mm::translated_byte_buffer;
+use crate::task::current_user_token;
+use crate::timer::get_time_us;
 use crate::{
     config::MAX_SYSCALL_NUM,
     loader::get_app_data_by_name,
     mm::{translated_refmut, translated_str},
     task::{
-        add_task, current_task, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next, TaskStatus,
+        add_task, current_task, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus,
     },
     timer::get_time_ms,
 };
@@ -119,25 +123,47 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
     // ---- release current PCB automatically
 }
 
+// 在應用程式給定的虛址上寫入數據
+unsafe fn write_structure<T: Sized>(ptr: *const u8, data: T) {
+    let len = size_of::<T>();
+    let pages = translated_byte_buffer(current_user_token(), ptr, len);
+    let u8_data = core::slice::from_raw_parts((&data as *const T) as *const u8, len);
+    let mut i: usize = 0;
+    for page in pages {
+        page.copy_from_slice(&u8_data[i..(i + page.len())]);
+        i += page.len();
+    }
+}
+
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
+    trace!("kernel: sys_get_time");
+    let time = get_time_us();
+    unsafe {
+        write_structure(
+            ts as *const u8,
+            TimeVal {
+                sec: time / 1000000,
+                usec: time % 100000,
+            },
+        );
+    }
+    0
 }
 
 pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info");
     unsafe {
-        *ti = TaskInfo {
-            status: TaskStatus::Running,
-            syscall_times: current_task().unwrap().get_syscall_times(),
-            time: get_time_ms(),
-        }
+        write_structure(
+            ti as *const u8,
+            TaskInfo {
+                status: TaskStatus::Running,
+                syscall_times: current_task().unwrap().get_syscall_times(),
+                time: get_time_ms(),
+            },
+        )
     }
     0
 }
