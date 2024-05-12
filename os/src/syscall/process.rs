@@ -1,8 +1,8 @@
 //! Process management syscalls
 use core::mem::size_of;
 
-use crate::mm::translated_byte_buffer;
-use crate::task::current_user_token;
+use crate::mm::{translated_byte_buffer, MapPermission};
+use crate::task::{current_user_token, mmap_current, munmap_current};
 use crate::timer::get_time_us;
 use crate::{
     config::MAX_SYSCALL_NUM,
@@ -94,15 +94,49 @@ pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
 }
 
 // YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
+pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+    if start % 4096 != 0 {
+        return -1;
+    }
+    // 末三位都是 0 ，不可讀、寫、執行，記憶體分配了也沒有意義
+    if port & 7 == 0 {
+        return -1;
+    }
+    // 僅定義讀、寫、執行，四位以上無定義
+    if port > 7 {
+        return -1;
+    }
+
+    // let permission = MapPermission::U | MapPermission::R | MapPermission::W | MapPermission::X;
+    let mut permission = MapPermission::U;
+    if (port & 1) != 0 {
+        permission |= MapPermission::R;
+    }
+    if (port & 2) != 0 {
+        permission |= MapPermission::W;
+    }
+    if (port & 4) != 0 {
+        permission |= MapPermission::X;
+    }
+    if mmap_current(start.into(), (start + len).into(), permission) {
+        0
+    } else {
+        -1
+    }
 }
 
 // YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
+pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+    if start % 4096 != 0 {
+        return -1;
+    }
+    if munmap_current(start.into(), (start + len).into()) {
+        0
+    } else {
+        -1
+    }
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {

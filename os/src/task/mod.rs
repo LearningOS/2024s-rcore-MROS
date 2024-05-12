@@ -16,6 +16,7 @@ mod task;
 
 use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
@@ -118,6 +119,28 @@ impl TaskManager {
         inner.tasks[current].task_syscall_times
     }
 
+    // 爲當前 app 映射一塊記憶體
+    fn mmap_current(
+        &self,
+        start_va: VirtAddr,
+        end_va: VirtAddr,
+        permission: MapPermission,
+    ) -> bool {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current]
+            .memory_set
+            .insert_framed_area(start_va, end_va, permission)
+    }
+    /// 爲當前 app 取消映射一塊記憶體
+    fn munmap_current(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current]
+            .memory_set
+            .remove_framed_area(start_va, end_va)
+    }
+
     /// Find next task to run and return task id.
     ///
     /// In this case, we only return the first `Ready` task in task list.
@@ -199,6 +222,16 @@ pub fn increase_current_syscall_times(syscall_number: usize) {
 /// 取得當前 app 呼叫某系統呼叫的次數
 pub fn get_current_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
     TASK_MANAGER.get_syscall_times()
+}
+
+/// 爲當前 app 映射一塊記憶體
+pub fn mmap_current(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> bool {
+    TASK_MANAGER.mmap_current(start_va, end_va, permission)
+}
+
+/// 爲當前 app 取消映射一塊記憶體
+pub fn munmap_current(start_va: VirtAddr, end_va: VirtAddr) -> bool {
+    TASK_MANAGER.munmap_current(start_va, end_va)
 }
 
 /// Suspend the current 'Running' task and run the next task in task list.
