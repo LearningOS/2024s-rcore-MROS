@@ -5,7 +5,7 @@ use crate::config::MAX_SYSCALL_NUM;
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT_BASE;
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
@@ -47,6 +47,18 @@ impl TaskControlBlock {
     pub fn get_syscall_times(&self) -> [u32; MAX_SYSCALL_NUM] {
         let inner = self.inner_exclusive_access();
         inner.task_syscall_times
+    }
+    /// 爲當前 app 映射一塊記憶體
+    pub fn mmap(&self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> bool {
+        let mut inner = self.inner_exclusive_access();
+        inner
+            .memory_set
+            .insert_framed_area(start_va, end_va, permission)
+    }
+    /// 爲當前 app 取消映射一塊記憶體
+    pub fn munmap(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        let mut inner = self.inner_exclusive_access();
+        inner.memory_set.remove_framed_area(start_va, end_va)
     }
 }
 

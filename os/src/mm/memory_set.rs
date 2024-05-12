@@ -48,17 +48,39 @@ impl MemorySet {
     pub fn token(&self) -> usize {
         self.page_table.token()
     }
-    /// Assume that no conflicts.
+    /// 插入一塊內存區域
     pub fn insert_framed_area(
         &mut self,
         start_va: VirtAddr,
         end_va: VirtAddr,
         permission: MapPermission,
-    ) {
+    ) -> bool {
+        // TODO: 檢查是否 start_va, end_va 區間是否跟已映射的記憶體區間重疊
+        let vpn_range = create_vpn_range(start_va, end_va);
+        for area in &self.areas {
+            if area.is_overlap(vpn_range) {
+                return false;
+            }
+        }
         self.push(
             MapArea::new(start_va, end_va, MapType::Framed, permission),
             None,
         );
+        return true;
+    }
+    /// 移除一塊內存區域
+    pub fn remove_framed_area(&mut self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        // TODO: 檢查是否 start_va, end_va 區間跟已映射的記憶體區間重疊
+        let vpn_range = create_vpn_range(start_va, end_va);
+        let mut ret = false;
+        for area in &mut self.areas {
+            if area.is_same(vpn_range) {
+                area.unmap(&mut self.page_table);
+                ret = true;
+            }
+        }
+        self.areas.retain(|area| !area.is_same(vpn_range));
+        return ret;
     }
     /// remove a area
     pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
@@ -309,6 +331,12 @@ pub struct MapArea {
     map_perm: MapPermission,
 }
 
+fn create_vpn_range(start_va: VirtAddr, end_va: VirtAddr) -> VPNRange {
+    let start_vpn: VirtPageNum = start_va.floor();
+    let end_vpn: VirtPageNum = end_va.ceil();
+    VPNRange::new(start_vpn, end_vpn)
+}
+
 impl MapArea {
     pub fn new(
         start_va: VirtAddr,
@@ -316,10 +344,8 @@ impl MapArea {
         map_type: MapType,
         map_perm: MapPermission,
     ) -> Self {
-        let start_vpn: VirtPageNum = start_va.floor();
-        let end_vpn: VirtPageNum = end_va.ceil();
         Self {
-            vpn_range: VPNRange::new(start_vpn, end_vpn),
+            vpn_range: create_vpn_range(start_va, end_va),
             data_frames: BTreeMap::new(),
             map_type,
             map_perm,
@@ -332,6 +358,16 @@ impl MapArea {
             map_type: another.map_type,
             map_perm: another.map_perm,
         }
+    }
+    pub fn is_same(&self, range: VPNRange) -> bool {
+        self.vpn_range == range
+    }
+    pub fn is_overlap(&self, range: VPNRange) -> bool {
+        let l1 = self.vpn_range.get_start();
+        let r1 = self.vpn_range.get_end();
+        let l2 = range.get_start();
+        let r2 = range.get_end();
+        return (l1 <= l2 && l2 < r1) || (l2 <= l1 && l1 < r2);
     }
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         let ppn: PhysPageNum;
