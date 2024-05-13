@@ -6,7 +6,7 @@ use core::mem::size_of;
 
 use crate::mm::{translated_byte_buffer, MapPermission};
 use crate::task::current_user_token;
-use crate::timer::get_time_us;
+use crate::timer::{get_time_us, MICRO_PER_SEC};
 use crate::{
     config::MAX_SYSCALL_NUM,
     fs::{open_file, OpenFlags},
@@ -145,8 +145,8 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
         write_structure(
             ts as *const u8,
             TimeVal {
-                sec: time / 1000000,
-                usec: time % 100000,
+                sec: time / MICRO_PER_SEC,
+                usec: time % MICRO_PER_SEC,
             },
         );
     }
@@ -155,13 +155,14 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 
 pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info");
+    let current_task = current_task().unwrap();
     unsafe {
         write_structure(
             ti as *const u8,
             TaskInfo {
                 status: TaskStatus::Running,
-                syscall_times: current_task().unwrap().get_syscall_times(),
-                time: get_time_ms(),
+                syscall_times: current_task.get_syscall_times(),
+                time: get_time_ms() - current_task.get_start_time(),
             },
         )
     }

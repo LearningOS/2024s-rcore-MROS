@@ -1,6 +1,7 @@
 //! Types related to task management & Functions for completely changing TCB
 
 use crate::config::MAX_SYSCALL_NUM;
+use crate::timer::get_time_ms;
 
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
@@ -50,6 +51,13 @@ impl TaskControlBlock {
         let inner = self.inner_exclusive_access();
         inner.task_syscall_times
     }
+
+    /// 取得當前 app 啓動時間
+    pub fn get_start_time(&self) -> usize {
+        let inner = self.inner_exclusive_access();
+        inner.start_time_ms
+    }
+
     /// 爲當前 app 映射一塊記憶體
     pub fn mmap(&self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> bool {
         let mut inner = self.inner_exclusive_access();
@@ -100,6 +108,9 @@ pub struct TaskControlBlockInner {
 
     /// 系統呼叫計數器
     pub task_syscall_times: [u32; MAX_SYSCALL_NUM],
+
+    /// App 啓動時間
+    pub start_time_ms: usize,
 }
 
 impl TaskControlBlockInner {
@@ -165,6 +176,7 @@ impl TaskControlBlock {
                     heap_bottom: user_sp,
                     program_brk: user_sp,
                     task_syscall_times: [0; MAX_SYSCALL_NUM],
+                    start_time_ms: get_time_ms(),
                 })
             },
         };
@@ -247,6 +259,7 @@ impl TaskControlBlock {
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
                     task_syscall_times: [0; MAX_SYSCALL_NUM],
+                    start_time_ms: get_time_ms(),
                 })
             },
         });
