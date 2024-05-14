@@ -40,6 +40,32 @@ impl TaskControlBlock {
         let inner = self.inner_exclusive_access();
         inner.memory_set.token()
     }
+
+    /// 取得優先級
+    pub fn get_priority(&self) -> isize {
+        let inner = self.inner_exclusive_access();
+        inner.priority
+    }
+
+    /// 修改優先級
+    pub fn set_priority(&self, priority: isize) {
+        let mut inner = self.inner_exclusive_access();
+        inner.priority = priority;
+    }
+
+    /// 取得 stride
+    pub fn get_stride(&self) -> isize {
+        let inner = self.inner_exclusive_access();
+        inner.stride
+    }
+
+    /// 根據 priority 增加 stride 的值
+    pub fn increase_stride(&self) {
+        const BIG_STRIDE: isize = 3628800;
+        let mut inner = self.inner_exclusive_access();
+        inner.stride += BIG_STRIDE / inner.priority;
+    }
+
     /// 增加當前 app 呼叫某系統呼叫的次數
     pub fn increase_syscall_times(&self, syscall_number: usize) {
         let mut inner = self.inner_exclusive_access();
@@ -111,6 +137,12 @@ pub struct TaskControlBlockInner {
 
     /// App 啓動時間
     pub start_time_ms: usize,
+
+    /// 優先級
+    pub priority: isize,
+
+    /// stride
+    pub stride: isize,
 }
 
 impl TaskControlBlockInner {
@@ -135,6 +167,8 @@ impl TaskControlBlockInner {
         }
     }
 }
+
+const DEFAULT_PRIORITY: isize = 16;
 
 impl TaskControlBlock {
     /// Create a new process
@@ -177,6 +211,8 @@ impl TaskControlBlock {
                     program_brk: user_sp,
                     task_syscall_times: [0; MAX_SYSCALL_NUM],
                     start_time_ms: get_time_ms(),
+                    priority: DEFAULT_PRIORITY,
+                    stride: 0,
                 })
             },
         };
@@ -260,6 +296,8 @@ impl TaskControlBlock {
                     program_brk: parent_inner.program_brk,
                     task_syscall_times: [0; MAX_SYSCALL_NUM],
                     start_time_ms: get_time_ms(),
+                    priority: DEFAULT_PRIORITY,
+                    stride: 0,
                 })
             },
         });
@@ -318,6 +356,8 @@ impl TaskControlBlock {
                     fd_table: Vec::new(),
                     task_syscall_times: [0; MAX_SYSCALL_NUM],
                     start_time_ms: get_time_ms(),
+                    priority: DEFAULT_PRIORITY,
+                    stride: 0,
                 })
             },
         });
