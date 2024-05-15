@@ -95,6 +95,7 @@ impl Inode {
         disk_inode.increase_size(new_size, v, &self.block_device);
     }
     /// Create inode under current inode by name
+    /// 僅 ROOT_NODE 可調用
     pub fn create(&self, name: &str) -> Option<Arc<Inode>> {
         let mut fs = self.fs.lock();
         let op = |root_inode: &DiskInode| {
@@ -142,6 +143,62 @@ impl Inode {
             self.block_device.clone(),
         )))
         // release efs lock automatically by compiler
+    }
+    /// 硬鏈結
+    /// 僅 ROOT_NODE 可調用
+    pub fn link(&self, new_name: &str, inode_id: u32) {
+        let mut fs = self.fs.lock();
+
+        // 增加鏈結數量
+        let (inode_block_id, inode_block_offset) = fs.get_disk_inode_pos(inode_id);
+        get_block_cache(inode_block_id as usize, Arc::clone(&self.block_device))
+            .lock()
+            .modify(inode_block_offset, |inode: &mut DiskInode| {
+                inode.increase_link_number();
+            });
+
+        // 在根目錄中記錄新鏈結
+        self.modify_disk_inode(|root_inode| {
+            // append file in the dirent
+            let file_count = (root_inode.size as usize) / DIRENT_SZ;
+            let new_size = (file_count + 1) * DIRENT_SZ;
+            // increase size
+            self.increase_size(new_size as u32, root_inode, &mut fs);
+            // write dirent
+            let dirent = DirEntry::new(new_name, inode_id);
+            root_inode.write_at(
+                file_count * DIRENT_SZ,
+                dirent.as_bytes(),
+                &self.block_device,
+            );
+        });
+    }
+    /// 刪除鏈結，鏈結數量歸零時，釋放 block 空間
+    /// 僅 ROOT_NODE 可調用
+    pub fn unlink(&self, name: &str) -> bool {
+        // let mut fs = self.fs.lock();
+        let inode = self.find(name);
+
+        // 減少鏈結數量
+        match inode {
+            Some(inode) => {
+                let (inode_block_id, inode_block_offset) = (inode.block_id, inode.block_offset);
+                get_block_cache(inode_block_id as usize, Arc::clone(&self.block_device))
+                    .lock()
+                    .modify(inode_block_offset, |new_inode: &mut DiskInode| {
+                        new_inode.decrease_link_number();
+                        // TODO: 釋放 block 空間
+                    });
+            }
+            None => {
+                return false;
+            }
+        }
+
+        // self.modify_disk_inode(|root_inode| {
+        // TODO: 在根目錄中刪除鏈結
+        // });
+        true
     }
     /// List inodes under current inode
     pub fn ls(&self) -> Vec<String> {
@@ -195,5 +252,9 @@ impl Inode {
     /// 取得 inode 類型（檔案或目錄）
     pub fn get_type(&self) -> DiskInodeType {
         self.read_disk_inode(|disk_inode| disk_inode.get_type())
+    }
+    /// 取得鏈結數量
+    pub fn get_link_number(&self) -> u32 {
+        self.read_disk_inode(|disk_inode| disk_inode.get_link_number())
     }
 }

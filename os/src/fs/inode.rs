@@ -124,6 +124,21 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     }
 }
 
+/// Link a file
+pub fn link_file(old_name: &str, new_name: &str) -> bool {
+    if let Some(inode) = ROOT_INODE.find(old_name) {
+        ROOT_INODE.link(new_name, inode.get_id());
+        true
+    } else {
+        false
+    }
+}
+
+/// Unlink a file
+pub fn unlink_file(name: &str) -> bool {
+    ROOT_INODE.unlink(name)
+}
+
 impl File for OSInode {
     fn readable(&self) -> bool {
         self.readable
@@ -165,7 +180,7 @@ impl File for OSInode {
             dev: 0,
             ino: inner.inode.get_id() as u64,
             mode: mode,
-            nlink: 1, //TODO: 實作硬鏈接之後更新 nlink 數量
+            nlink: inner.inode.get_link_number(), //TODO: 實作硬鏈接之後更新 nlink 數量
             pad: [0; 7],
         }
     }
