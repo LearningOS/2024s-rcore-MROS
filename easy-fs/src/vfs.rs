@@ -182,22 +182,30 @@ impl Inode {
         // 減少鏈結數量
         match inode {
             Some(inode) => {
-                let (inode_block_id, inode_block_offset) = (inode.block_id, inode.block_offset);
-                get_block_cache(inode_block_id as usize, Arc::clone(&self.block_device))
-                    .lock()
-                    .modify(inode_block_offset, |new_inode: &mut DiskInode| {
-                        new_inode.decrease_link_number();
-                        // TODO: 釋放 block 空間
-                    });
+                inode.decrease_link_number();
             }
             None => {
                 return false;
             }
         }
 
-        // self.modify_disk_inode(|root_inode| {
-        // TODO: 在根目錄中刪除鏈結
-        // });
+        self.modify_disk_inode(|disk_inode| {
+            // 將 DirEntry 中的檔名改成空的，讓搜尋時找不到
+            // XXX: 無法回收空間
+            assert!(disk_inode.is_dir());
+            let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+            let mut dirent = DirEntry::empty();
+            for i in 0..file_count {
+                assert_eq!(
+                    disk_inode.read_at(DIRENT_SZ * i, dirent.as_bytes_mut(), &self.block_device),
+                    DIRENT_SZ,
+                );
+                if dirent.name() == name {
+                    dirent.clear_name();
+                    disk_inode.write_at(DIRENT_SZ * i, dirent.as_bytes_mut(), &self.block_device);
+                }
+            }
+        });
         true
     }
     /// List inodes under current inode
@@ -256,5 +264,13 @@ impl Inode {
     /// 取得鏈結數量
     pub fn get_link_number(&self) -> u32 {
         self.read_disk_inode(|disk_inode| disk_inode.get_link_number())
+    }
+    /// 減少鏈結數量
+    pub fn decrease_link_number(&self) {
+        if self.get_link_number() > 1 {
+            self.modify_disk_inode(|disk_inode| disk_inode.decrease_link_number());
+        } else {
+            self.clear();
+        }
     }
 }

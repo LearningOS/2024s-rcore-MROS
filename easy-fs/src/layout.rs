@@ -324,6 +324,7 @@ impl DiskInode {
         self.indirect2 = 0;
         v
     }
+
     /// Read data from current disk inode
     pub fn read_at(
         &self,
@@ -437,6 +438,10 @@ impl DirEntry {
     /// Serialize into mutable bytes
     pub fn as_bytes_mut(&mut self) -> &mut [u8] {
         unsafe { core::slice::from_raw_parts_mut(self as *mut _ as usize as *mut u8, DIRENT_SZ) }
+    }
+    /// 名字刪掉，假裝 entry 真的不見了
+    pub fn clear_name(&mut self) {
+        self.name = [0u8; NAME_LENGTH_LIMIT + 1];
     }
     /// Get name of the entry
     pub fn name(&self) -> &str {
