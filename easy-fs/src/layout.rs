@@ -68,9 +68,11 @@ impl SuperBlock {
     }
 }
 /// Type of a disk inode
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum DiskInodeType {
+    /// 檔案
     File,
+    /// 目錄
     Directory,
 }
 
@@ -101,6 +103,9 @@ impl DiskInode {
     /// Whether this inode is a directory
     pub fn is_dir(&self) -> bool {
         self.type_ == DiskInodeType::Directory
+    }
+    pub fn get_type(&self) -> DiskInodeType {
+        self.type_
     }
     /// Whether this inode is a file
     #[allow(unused)]

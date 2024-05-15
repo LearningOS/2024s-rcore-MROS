@@ -8,6 +8,7 @@ use alloc::vec::Vec;
 use spin::{Mutex, MutexGuard};
 /// Virtual filesystem layer over easy-fs
 pub struct Inode {
+    id: u32,
     block_id: usize,
     block_offset: usize,
     fs: Arc<Mutex<EasyFileSystem>>,
@@ -17,12 +18,14 @@ pub struct Inode {
 impl Inode {
     /// Create a vfs inode
     pub fn new(
+        id: u32,
         block_id: u32,
         block_offset: usize,
         fs: Arc<Mutex<EasyFileSystem>>,
         block_device: Arc<dyn BlockDevice>,
     ) -> Self {
         Self {
+            id,
             block_id: block_id as usize,
             block_offset,
             fs,
@@ -65,6 +68,7 @@ impl Inode {
             self.find_inode_id(name, disk_inode).map(|inode_id| {
                 let (block_id, block_offset) = fs.get_disk_inode_pos(inode_id);
                 Arc::new(Self::new(
+                    inode_id,
                     block_id,
                     block_offset,
                     self.fs.clone(),
@@ -131,6 +135,7 @@ impl Inode {
         block_cache_sync_all();
         // return inode
         Some(Arc::new(Self::new(
+            new_inode_id,
             block_id,
             block_offset,
             self.fs.clone(),
@@ -182,5 +187,13 @@ impl Inode {
             }
         });
         block_cache_sync_all();
+    }
+    /// 取得 inode id
+    pub fn get_id(&self) -> u32 {
+        self.id
+    }
+    /// 取得 inode 類型（檔案或目錄）
+    pub fn get_type(&self) -> DiskInodeType {
+        self.read_disk_inode(|disk_inode| disk_inode.get_type())
     }
 }

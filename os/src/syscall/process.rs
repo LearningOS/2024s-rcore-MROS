@@ -124,7 +124,7 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 }
 
 // 在應用程式給定的虛址上寫入數據
-unsafe fn write_structure<T: Sized>(ptr: *const u8, data: T) {
+pub unsafe fn write_structure<T: Sized>(ptr: *const u8, data: T) {
     let len = size_of::<T>();
     let pages = translated_byte_buffer(current_user_token(), ptr, len);
     let u8_data = core::slice::from_raw_parts((&data as *const T) as *const u8, len);
