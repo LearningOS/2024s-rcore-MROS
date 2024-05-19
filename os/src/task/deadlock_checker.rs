@@ -68,6 +68,10 @@ impl DeadlockCheck {
                 if finish[tid] != true {
                     match self.need[tid] {
                         None => {
+                            for release_resource_id in 0..self.allocation[tid].len() {
+                                work[release_resource_id] +=
+                                    self.allocation[tid][release_resource_id];
+                            }
                             finish[tid] = true;
                             return Some(tid);
                         }
